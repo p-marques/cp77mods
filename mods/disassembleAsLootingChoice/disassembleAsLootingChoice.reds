@@ -14,6 +14,8 @@ public class DisassembleAsLootingOptionMod {
     public static func Initialize(lootingController: wref<LootingController>, gi: GameInstance, dataManager: wref<InventoryDataManagerV2>, referenceChoice: InteractionChoiceData) -> ref<DisassembleAsLootingOptionMod> {
         let mod: ref<DisassembleAsLootingOptionMod> = new DisassembleAsLootingOptionMod();
         let excludedQualities: array<String>;
+        let shouldPlaySound: Bool;
+
         mod.lootingController = lootingController;
         mod.gameInstance = gi;
         mod.dataManager = dataManager;
@@ -27,9 +29,13 @@ public class DisassembleAsLootingOptionMod {
         // Default -> excludedQualities = ["Legendary"];
         excludedQualities = ["Legendary"];
 
+        // Play a sound after disassemble? This is not the standard disassemble sound, just a stand-in.
+        // Default -> shouldPlaySound = true;
+        shouldPlaySound = true;
+
         // ------ Settings End ------
 
-        mod.settings = DisassembleAsLootingOptionModSettings.Initialize(excludedQualities);
+        mod.settings = DisassembleAsLootingOptionModSettings.Initialize(excludedQualities, shouldPlaySound);
 
         return mod;
     }
@@ -89,8 +95,8 @@ public class DisassembleAsLootingOptionMod {
         let i: Int32 = 0;
 
         while i < ArraySize(restoredAttachments) {
-        transactionSystem.GiveItem(playerGameObject, restoredAttachments[i].itemID, 1);
-        i += 1;
+            transactionSystem.GiveItem(playerGameObject, restoredAttachments[i].itemID, 1);
+            i += 1;
         };
 
         GameInstance.GetTelemetrySystem(this.gameInstance).LogItemDisassembled(playerGameObject, itemID);
@@ -100,11 +106,15 @@ public class DisassembleAsLootingOptionMod {
 
         i = 0;
         while i < ArraySize(listOfIngredients) {
-        transactionSystem.GiveItem(playerGameObject, ItemID.FromTDBID(listOfIngredients[i].id.GetID()), listOfIngredients[i].quantity);
-        i += 1;
+            transactionSystem.GiveItem(playerGameObject, ItemID.FromTDBID(listOfIngredients[i].id.GetID()), listOfIngredients[i].quantity);
+            i += 1;
         };
 
         this.craftingSystem.UpdateBlackboard(CraftingCommands.DisassemblingFinished, itemID, listOfIngredients);
+
+        if this.settings.playSoundAfterDisassemble {
+            this.PlayDisassembleSound();
+        }
     }
 
     private func IsDisassembleChoiceShowing(data: LootData) -> Bool {
@@ -115,6 +125,10 @@ public class DisassembleAsLootingOptionMod {
         }
 
         return false;
+    }
+
+    private func PlayDisassembleSound() -> Void {
+        GameObject.PlaySoundEvent(this.player, n"dev_vending_machine_can_falls");
     }
 
     private func ShowWarningMessage(message : String) -> Void {
@@ -129,7 +143,9 @@ public class DisassembleAsLootingOptionMod {
 struct DisassembleAsLootingOptionModSettings {
     private let excludedQualities: array<CName>;
 
-    public static func Initialize(qualitiesStrings: array<String>) -> DisassembleAsLootingOptionModSettings {
+    public let playSoundAfterDisassemble: Bool;
+
+    public static func Initialize(qualitiesStrings: array<String>, playSound: Bool) -> DisassembleAsLootingOptionModSettings {
         let excludedQualities: array<CName>;
         let size: Int32 = ArraySize(qualitiesStrings);
         let i: Int32;
@@ -142,7 +158,7 @@ struct DisassembleAsLootingOptionModSettings {
             i += 1;
         }
 
-        return new DisassembleAsLootingOptionModSettings(excludedQualities);
+        return new DisassembleAsLootingOptionModSettings(excludedQualities, playSound);
     }
 
     public static func IsQualityExcluded(self: DisassembleAsLootingOptionModSettings, quality: CName) -> Bool {
