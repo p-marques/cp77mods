@@ -26,6 +26,7 @@ public class DisassembleAsLootingOptionMod {
         // ------ Settings Start ------
 
         // Item quality strings in here prevent the disassemble option from appearing.
+        // Possible qualities: "Common", "Uncommon", "Rare", "Epic" and "Legendary"
         // Default -> excludedQualities = ["Legendary"];
         excludedQualities = ["Legendary"];
 
@@ -40,9 +41,11 @@ public class DisassembleAsLootingOptionMod {
         return mod;
     }
 
-    public func GetModifiedLootData(data: LootData) -> LootData {
-        if this.CanCurrentItemBeDisassembled() && !this.IsDisassembleChoiceShowing(data) {
-            ArrayPush(data.choices, this.customChoice);
+    public func HandleAdditionOfChoiceDisassemble(data: LootData) -> LootData {
+        if this.CanCurrentItemBeDisassembled() {
+            if !this.IsDisassembleChoiceShowing(data) {
+                ArrayPush(data.choices, this.customChoice);
+            }
 
             this.player.RegisterInputListener(this, n"ChoiceDisassemble_Hold");
         }
@@ -56,9 +59,11 @@ public class DisassembleAsLootingOptionMod {
     private func CanCurrentItemBeDisassembled() -> Bool {
         let inventoryItemData: InventoryItemData = this.lootingController.GetCurrentItem();
         let itemData: ref<gameItemData> = InventoryItemData.GetGameItemData(inventoryItemData);
+        //let itemRecord: = TweakDBInterface.GetItemRecord(ItemID.GetTDBID(itemData.GetID()));
 
         // Why does RPGManager.CanItemBeDisassembled() return true on Ammo?
-        if Equals(itemData.GetItemType(), gamedataItemType.Con_Ammo) {
+        // Shards also come back as true.
+        if Equals(itemData.GetItemType(), gamedataItemType.Con_Ammo) || itemData.HasTag(n"Shard") || itemData.HasTag(n"Quest") {
             return false;
         }
 
@@ -81,16 +86,13 @@ public class DisassembleAsLootingOptionMod {
 
                 this.DisassembleItem(itemID, InventoryItemData.GetQuantity(itemData));
             }
-            else {
-                this.ShowWarningMessage("Disassemble As Looting Option Mod:\\nInput was consumed despite the fact that the item can't be disassembled.\\nThis should not be hapenning.\\nPlease report this on nexusmods.");
-            }
         }
     }
 
     private func DisassembleItem(itemID: ItemID, amount: Int32) -> Void {
         let restoredAttachments: array<ItemAttachments>;
         let transactionSystem: ref<TransactionSystem> = GameInstance.GetTransactionSystem(this.gameInstance);
-        let listOfIngredients: array<IngredientData> = this.craftingSystem.GetDisassemblyResultItems(this.player, itemID, amount, restoredAttachments);
+        let listOfIngredients: array<IngredientData> = this.craftingSystem.GetDisassemblyResultItems(this.lootingController.GetLootOwner(), itemID, amount, restoredAttachments);
         let playerGameObject: ref<GameObject> = this.player as GameObject;
         let i: Int32 = 0;
 
@@ -101,7 +103,13 @@ public class DisassembleAsLootingOptionMod {
 
         GameInstance.GetTelemetrySystem(this.gameInstance).LogItemDisassembled(playerGameObject, itemID);
         if (transactionSystem.RemoveItem(this.lootingController.GetLootOwner(), itemID, amount)) {
-            this.lootingController.Hide();
+            this.ForceInteractionReactivation();
+        }
+
+        let str: String;
+
+        for ingredient in listOfIngredients {
+            str += ingredient.label + ": " + ingredient.quantity + ", " + ingredient.baseQuantity + ", " + ingredient.itemAmount + ", " + ingredient.inventoryQuantity + "\\n";
         }
 
         i = 0;
@@ -131,11 +139,24 @@ public class DisassembleAsLootingOptionMod {
         GameObject.PlaySoundEvent(this.player, n"dev_vending_machine_can_falls");
     }
 
+    private func ForceInteractionReactivation() -> Void {
+        let event: ref<InteractionActivationEvent> = new InteractionActivationEvent();
+
+        event.eventType = gameinteractionsEInteractionEventType.EIET_activate;
+        event.hotspot = this.lootingController.GetLootOwner();
+        event.activator = this.player;
+        event.layerData = new InteractionLayerData(n"Loot");
+
+        this.lootingController.GetLootOwner().QueueEvent(event);
+    }
+
     private func ShowWarningMessage(message : String) -> Void {
         let warningMsg: SimpleScreenMessage;
+
         warningMsg.isShown = true;
         warningMsg.duration = 5.00;
         warningMsg.message = message;
+
         this.blackboard.SetVariant(GetAllBlackboardDefs().UI_Notifications.WarningMessage, ToVariant(warningMsg), true);
     }
 }
@@ -175,15 +196,9 @@ private final func RefreshChoicesPool(choices: script_ref<array<InteractionChoic
         this.disassembleAsLootingOptionMod = DisassembleAsLootingOptionMod.Initialize(this, this.m_gameInstance, this.m_dataManager, this.m_currendData.choices[0]);
     }
 
-    this.m_currendData = this.disassembleAsLootingOptionMod.GetModifiedLootData(this.m_currendData);
+    this.m_currendData = this.disassembleAsLootingOptionMod.HandleAdditionOfChoiceDisassemble(this.m_currendData);
 
     wrappedMethod(this.m_currendData.choices);
-}
-
-@wrapMethod(LootingController)
-public final func Hide() -> Void {
-    this.m_dataManager.GetPlayer().UnregisterInputListener(this.disassembleAsLootingOptionMod, n"ChoiceDisassemble_Hold");
-    wrappedMethod();
 }
 
 @addMethod(LootingController)
