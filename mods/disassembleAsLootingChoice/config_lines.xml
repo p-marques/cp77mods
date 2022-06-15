@@ -1,0 +1,34 @@
+<!--
+/////////////////////////////////////////////////////////////////////
+/////////       Copy/paste to inputUserMappings.xml        /////////
+///////////////////////////////////////////////////////////////////
+-->
+<mapping name="ChoiceDisassemble" type="Button" >
+    <button id="IK_Z"/>
+    <button id="IK_Pad_DigitUp" />
+</mapping>
+
+
+<!--
+/////////////////////////////////////////////////////////////////////
+/////////         Copy/paste to inputContexts.xml          /////////
+///////////////////////////////////////////////////////////////////
+-->
+
+<!--
+    Copy and paste this line into <context name="InteractionActions">
+-->
+<action name="ChoiceDisassemble_Hold"			map="ChoiceDisassemble" priority="-2" />
+
+
+<!--
+    Look for "HOLD ACTIONS" and copy paste this line
+-->
+<hold action="ChoiceDisassemble_Hold"		timeout="0.3" />
+
+<!--
+    Look for "INPUT EVENTS" and copy paste these lines
+-->
+<acceptedEvents action="ChoiceDisassemble_Hold" >
+    <event name="BUTTON_HOLD_COMPLETE" />
+</acceptedEvents>
