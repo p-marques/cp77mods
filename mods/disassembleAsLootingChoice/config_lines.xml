@@ -5,7 +5,7 @@
 -->
 <mapping name="ChoiceDisassemble" type="Button" >
     <button id="IK_Z"/>
-    <button id="IK_Pad_DigitUp" />
+    <button id="IK_Pad_DigitLeft" />
 </mapping>
 
 
