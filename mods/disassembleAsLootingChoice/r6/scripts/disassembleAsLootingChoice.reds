@@ -1,5 +1,5 @@
 // Disassemble As Looting Option by pMarK
-// v1.0
+// v1.01
 
 public class DisassembleAsLootingOptionMod {
     private let lootingController: wref<LootingController>;
@@ -21,7 +21,7 @@ public class DisassembleAsLootingOptionMod {
         mod.dataManager = dataManager;
         mod.player = dataManager.GetPlayer();
         mod.blackboard = GameInstance.GetBlackboardSystem(gi).Get(GetAllBlackboardDefs().UI_Notifications);
-        mod.customChoice = new InteractionChoiceData(n"ChoiceDisassemble_Hold", EInputKey.IK_Z, true, "Disassemble", referenceChoice.type, referenceChoice.data, referenceChoice.captionParts);
+        mod.customChoice = new InteractionChoiceData(n"ChoiceDisassemble_Hold", EInputKey.IK_Z, true, GetLocalizedText("Gameplay-Devices-DisplayNames-DisassemblableItem"), referenceChoice.type, referenceChoice.data, referenceChoice.captionParts);
 
         // ------ Settings Start ------
 
