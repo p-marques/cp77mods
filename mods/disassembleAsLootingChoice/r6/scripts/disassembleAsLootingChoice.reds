@@ -1,5 +1,5 @@
 // Disassemble As Looting Option by pMarK
-// v1.01
+// v1.1.0
 
 public class DisassembleAsLootingOptionMod {
     private let lootingController: wref<LootingController>;
@@ -106,23 +106,55 @@ public class DisassembleAsLootingOptionMod {
             this.ForceInteractionReactivation();
         }
 
-        let str: String;
-
-        for ingredient in listOfIngredients {
-            str += ingredient.label + ": " + ingredient.quantity + ", " + ingredient.baseQuantity + ", " + ingredient.itemAmount + ", " + ingredient.inventoryQuantity + "\\n";
-        }
-
         i = 0;
         while i < ArraySize(listOfIngredients) {
             transactionSystem.GiveItem(playerGameObject, ItemID.FromTDBID(listOfIngredients[i].id.GetID()), listOfIngredients[i].quantity);
             i += 1;
         };
 
+        this.AwardExperience(listOfIngredients, amount);
+
         this.craftingSystem.UpdateBlackboard(CraftingCommands.DisassemblingFinished, itemID, listOfIngredients);
 
         if this.settings.playSoundAfterDisassemble {
             this.PlayDisassembleSound();
         }
+    }
+
+    private func AwardExperience(ingredients: array<IngredientData>, amount: Int32) -> Void {
+        let ingredientQuality: gamedataQuality;
+        let xpID: TweakDBID;
+        let xpToAward: Int32;
+        let i: Int32 = 0;
+
+        while i < ArraySize(ingredients) {
+
+            ingredientQuality = RPGManager.GetItemQualityFromRecord(TweakDBInterface.GetItemRecord(ingredients[i].id.GetID()));
+
+            switch ingredientQuality {
+                case gamedataQuality.Common:
+                xpID = t"Constants.CraftingSystem.commonIngredientXP";
+                break;
+                case gamedataQuality.Uncommon:
+                xpID = t"Constants.CraftingSystem.uncommonIngredientXP";
+                break;
+                case gamedataQuality.Rare:
+                xpID = t"Constants.CraftingSystem.rareIngredientXP";
+                break;
+                case gamedataQuality.Epic:
+                xpID = t"Constants.CraftingSystem.epicIngredientXP";
+                break;
+                case gamedataQuality.Legendary:
+                xpID = t"Constants.CraftingSystem.legendaryIngredientXP";
+                break;
+            }
+
+            xpToAward += TweakDBInterface.GetInt(xpID, 0) * ingredients[i].baseQuantity * amount;
+
+            i += 1;
+        }
+
+        RPGManager.AwardXP(this.gameInstance, Cast<Float>(xpToAward) * 0.33, gamedataProficiencyType.Crafting);
     }
 
     private func IsDisassembleChoiceShowing(data: LootData) -> Bool {
