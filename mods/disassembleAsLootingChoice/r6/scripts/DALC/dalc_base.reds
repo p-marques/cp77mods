@@ -1,7 +1,9 @@
-// Disassemble As Looting Option by pMarK
-// v1.1.1
+// Disassemble As Looting Choice by pMarK
+// v1.2
 
-public class DisassembleAsLootingOptionMod {
+module DALC.Base
+
+public class DALC {
     private let lootingController: wref<LootingController>;
     private let gameInstance: GameInstance;
     private let dataManager: wref<InventoryDataManagerV2>;
@@ -9,19 +11,30 @@ public class DisassembleAsLootingOptionMod {
     private let blackboard: ref<IBlackboard>;
     private let craftingSystem: ref<CraftingSystem>;
     private let customChoice: InteractionChoiceData;
-    private let settings: DisassembleAsLootingOptionModSettings;
+    private let settings: DALCDefaultSettings;
 
-    public static func Initialize(lootingController: wref<LootingController>, gi: GameInstance, dataManager: wref<InventoryDataManagerV2>, referenceChoice: InteractionChoiceData) -> ref<DisassembleAsLootingOptionMod> {
-        let mod: ref<DisassembleAsLootingOptionMod> = new DisassembleAsLootingOptionMod();
+    public func Setup(
+        lootingController: wref<LootingController>,
+        gi: GameInstance,
+        dataManager: wref<InventoryDataManagerV2>,
+        referenceChoice: InteractionChoiceData
+        ) -> Void {
+        this.lootingController = lootingController;
+        this.gameInstance = gi;
+        this.dataManager = dataManager;
+        this.craftingSystem = GameInstance.GetScriptableSystemsContainer(gi).Get(n"CraftingSystem") as CraftingSystem;
+        this.player = dataManager.GetPlayer();
+        this.blackboard = GameInstance.GetBlackboardSystem(gi).Get(GetAllBlackboardDefs().UI_Notifications);
+        this.customChoice = new InteractionChoiceData(n"ChoiceDisassemble_Hold",
+            EInputKey.IK_Z, true, GetLocalizedText("Gameplay-Devices-DisplayNames-DisassemblableItem"),
+            referenceChoice.type, referenceChoice.data, referenceChoice.captionParts);
+
+        this.SetupSettings();
+    }
+
+    protected func SetupSettings() -> Void {
         let excludedQualities: array<String>;
         let shouldPlaySound: Bool;
-
-        mod.lootingController = lootingController;
-        mod.gameInstance = gi;
-        mod.dataManager = dataManager;
-        mod.player = dataManager.GetPlayer();
-        mod.blackboard = GameInstance.GetBlackboardSystem(gi).Get(GetAllBlackboardDefs().UI_Notifications);
-        mod.customChoice = new InteractionChoiceData(n"ChoiceDisassemble_Hold", EInputKey.IK_Z, true, GetLocalizedText("Gameplay-Devices-DisplayNames-DisassemblableItem"), referenceChoice.type, referenceChoice.data, referenceChoice.captionParts);
 
         // ------ Settings Start ------
 
@@ -36,13 +49,17 @@ public class DisassembleAsLootingOptionMod {
 
         // ------ Settings End ------
 
-        mod.settings = DisassembleAsLootingOptionModSettings.Initialize(excludedQualities, shouldPlaySound);
+        this.settings = DALCDefaultSettings.Initialize(excludedQualities, shouldPlaySound);
+    }
 
-        return mod;
+    public func GetIsEnabled() -> Bool {
+        return true;
     }
 
     public func HandleAdditionOfChoiceDisassemble(data: LootData) -> LootData {
-        if this.CanCurrentItemBeDisassembled() {
+        if this.GetIsEnabled() &&
+            this.CanCurrentItemBeDisassembled() &&
+            !this.lootingController.GetIsLocked() {
             if !this.IsDisassembleChoiceShowing(data) {
                 ArrayPush(data.choices, this.customChoice);
             }
@@ -67,23 +84,25 @@ public class DisassembleAsLootingOptionMod {
             return false;
         }
 
-        if DisassembleAsLootingOptionModSettings.IsQualityExcluded(this.settings, InventoryItemData.GetQuality(inventoryItemData)) {
+        if this.IsQualityExcluded(InventoryItemData.GetQuality(inventoryItemData)) {
             return false;
         }
 
         return RPGManager.CanItemBeDisassembled(this.gameInstance, itemData);
     }
 
+    protected func IsQualityExcluded(quality: CName) -> Bool {
+        return DALCDefaultSettings.IsQualityExcluded(this.settings, quality);
+    }
+
     protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsumer) -> Bool {
-        if Equals(ListenerAction.GetName(action), n"ChoiceDisassemble_Hold") && Equals(ListenerAction.GetType(action), gameinputActionType.BUTTON_HOLD_COMPLETE) {
+        if this.GetIsEnabled() &&
+            Equals(ListenerAction.GetName(action), n"ChoiceDisassemble_Hold") &&
+            Equals(ListenerAction.GetType(action), gameinputActionType.BUTTON_HOLD_COMPLETE) {
             let itemData: InventoryItemData = this.lootingController.GetCurrentItem();
             let itemID: ItemID = InventoryItemData.GetID(itemData);
 
             if this.CanCurrentItemBeDisassembled() {
-                if !IsDefined(this.craftingSystem) {
-                    this.craftingSystem = GameInstance.GetScriptableSystemsContainer(this.gameInstance).Get(n"CraftingSystem") as CraftingSystem;
-                }
-
                 this.DisassembleItem(itemID, InventoryItemData.GetQuantity(itemData));
             }
         }
@@ -116,7 +135,7 @@ public class DisassembleAsLootingOptionMod {
 
         this.craftingSystem.UpdateBlackboard(CraftingCommands.DisassemblingFinished, itemID, listOfIngredients);
 
-        if this.settings.playSoundAfterDisassemble {
+        if (this.ShouldPlaySound()) {
             this.PlayDisassembleSound();
         }
     }
@@ -135,7 +154,11 @@ public class DisassembleAsLootingOptionMod {
         return false;
     }
 
-    private func PlayDisassembleSound() -> Void {
+    protected func ShouldPlaySound() -> Bool {
+        return this.settings.playSoundAfterDisassemble;
+    }
+
+    protected func PlayDisassembleSound() -> Void {
         GameObject.PlaySoundEvent(this.player, n"dev_vending_machine_can_falls");
     }
 
@@ -161,12 +184,12 @@ public class DisassembleAsLootingOptionMod {
     }
 }
 
-struct DisassembleAsLootingOptionModSettings {
+struct DALCDefaultSettings {
     private let excludedQualities: array<CName>;
 
     public let playSoundAfterDisassemble: Bool;
 
-    public static func Initialize(qualitiesStrings: array<String>, playSound: Bool) -> DisassembleAsLootingOptionModSettings {
+    public static func Initialize(qualitiesStrings: array<String>, playSound: Bool) -> DALCDefaultSettings {
         let excludedQualities: array<CName>;
         let size: Int32 = ArraySize(qualitiesStrings);
         let i: Int32;
@@ -179,41 +202,12 @@ struct DisassembleAsLootingOptionModSettings {
             i += 1;
         }
 
-        return new DisassembleAsLootingOptionModSettings(excludedQualities, playSound);
+        return new DALCDefaultSettings(excludedQualities, playSound);
     }
 
-    public static func IsQualityExcluded(self: DisassembleAsLootingOptionModSettings, quality: CName) -> Bool {
+    public static func IsQualityExcluded(self: DALCDefaultSettings, quality: CName) -> Bool {
         return ArrayContains(self.excludedQualities, quality);
     }
 }
 
-@addField(LootingController)
-private let disassembleAsLootingOptionMod: ref<DisassembleAsLootingOptionMod>;
 
-@wrapMethod(LootingController)
-private final func RefreshChoicesPool(choices: script_ref<array<InteractionChoiceData>>) -> Void {
-    if !IsDefined(this.disassembleAsLootingOptionMod) {
-        this.disassembleAsLootingOptionMod = DisassembleAsLootingOptionMod.Initialize(this, this.m_gameInstance, this.m_dataManager, this.m_currendData.choices[0]);
-    }
-
-    this.m_currendData = this.disassembleAsLootingOptionMod.HandleAdditionOfChoiceDisassemble(this.m_currendData);
-
-    wrappedMethod(this.m_currendData.choices);
-}
-
-@addMethod(LootingController)
-public func GetCurrentItem() -> InventoryItemData {
-    let itemData: ref<gameItemData> = this.m_dataManager.GetExternalGameItemData(this.m_currendData.ownerId, this.m_currendData.itemIDs[this.m_currendData.currentIndex]);
-
-    return this.m_dataManager.GetInventoryItemData(this.GetLootOwner(), itemData);
-}
-
-@addMethod(LootingController)
-public func GetLootOwner() -> wref<GameObject> {
-    return GameInstance.FindEntityByID(this.m_gameInstance, this.m_currendData.ownerId) as GameObject;
-}
-
-@addMethod(InventoryDataManagerV2)
-public func GetPlayer() -> wref<PlayerPuppet> {
-    return this.m_Player;
-}
